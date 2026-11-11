@@ -1,0 +1,35 @@
+services:
+  redis:
+    image: redis:8.2            # Redis 8 ships Streams and TimeSeries built in
+    ports: ["6380:6379"]         # 6380 on the host, in case a local Redis uses 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 10
+
+  simulator:
+    build: ./backend
+    command: python -m aos.simulator
+    environment: { REDIS_URL: "redis://redis:6379/0" }
+    depends_on: { redis: { condition: service_healthy } }
+    restart: unless-stopped
+
+  ingest:
+    build: ./backend
+    command: python -m aos.ingest
+    environment: { REDIS_URL: "redis://redis:6379/0" }
+    depends_on: { redis: { condition: service_healthy } }
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    command: uvicorn aos.api:app --host 0.0.0.0 --port 8000
+    environment: { REDIS_URL: "redis://redis:6379/0" }
+    ports: ["8001:8000"]
+    depends_on: { redis: { condition: service_healthy } }
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports: ["8090:80"]
+    depends_on: [api]
